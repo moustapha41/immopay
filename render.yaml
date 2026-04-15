@@ -1,9 +1,10 @@
-services:
-  # Base de données
-  - type: pgo
-    name: immosuite-db
+databases:
+  # Base de données PostgreSQL
+  - name: immosuite-db
     plan: free
-    postgresMajorVersion: 15
+    postgresMajorVersion: "15"
+
+services:
 
   # Serveur Backend (NodeJS)
   - type: web
