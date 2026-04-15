@@ -1,0 +1,28 @@
+services:
+  # Base de données
+  - type: pgo
+    name: immosuite-db
+    plan: free
+    postgresMajorVersion: 15
+
+  # Serveur Backend (NodeJS)
+  - type: web
+    name: immosuite-backend
+    env: node
+    plan: free
+    buildCommand: "cd backend && npm install"
+    startCommand: "cd backend && npm start"
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: immosuite-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      # (Vous devrez ajouter vos clés PayDunya manuellement sur le tableau de bord Render)
