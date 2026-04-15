@@ -18,28 +18,54 @@ export default function PortailLocataire() {
   const [agencySettings, setAgencySettings] = useState({})
 
   useEffect(() => {
-    Promise.all([
-      portal.getData(token),
-      settingsApi.get()
-    ]).then(([d, s]) => {
-      if (d.error) { setError(d.error) }
-      else { setData(d); setPayAmount(d.resteAPayer) }
-      setAgencySettings(s || {})
-    }).catch(err => setError(err.message))
-    .finally(() => setLoading(false))
+    const urlParams = new URLSearchParams(window.location.search)
+    const paymentStatus = urlParams.get('payment')
+
+    const initialize = async () => {
+      try {
+        if (paymentStatus === 'success') {
+          // Validation de sécurité ou fallback manuel (pratique pour tests webhooks bloqués)
+          await portal.verifyManual(token).catch(e => console.log('Auto-verify error:', e))
+          // Nettoyer l'URL
+          window.history.replaceState({}, document.title, window.location.pathname)
+        } else if (paymentStatus === 'cancel') {
+          setError("Le paiement a été annulé.")
+          window.history.replaceState({}, document.title, window.location.pathname)
+        }
+
+        const [d, s] = await Promise.all([
+          portal.getData(token),
+          settingsApi.get()
+        ])
+        if (d.error) { setError(d.error) }
+        else { setData(d); setPayAmount(d.resteAPayer) }
+        setAgencySettings(s || {})
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    initialize()
   }, [token])
 
   const handlePayment = async (e) => {
     e.preventDefault()
     setIsPaying(true)
+    setError('')
     try {
-      await portal.pay(token, { amount: payAmount, method: 'PayDunya' })
-      // Reload data
-      const d = await portal.getData(token)
-      setData(d)
-      setPayAmount(d.resteAPayer)
-    } catch (err) { setError(err.message) }
-    setIsPaying(false)
+      const response = await portal.paydunyaInit(token, payAmount)
+      if (response.paydunya_url) {
+        window.location.href = response.paydunya_url
+      } else if (response.error) {
+        setError(response.error)
+        setIsPaying(false)
+      }
+    } catch (err) { 
+      setError('Erreur de connexion avec PayDunya: ' + err.message)
+      setIsPaying(false)
+    }
   }
 
   const handlePrintQuittance = (item) => {

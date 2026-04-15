@@ -16,6 +16,7 @@ function formatFCFA(amount) { return (amount || 0).toLocaleString('fr-FR') + ' F
 
 const statusConfig = {
   'Payé': { badge: 'badge-success', icon: CheckCircle2, color: '#10b981' },
+  'Partiel': { badge: 'badge-warning', icon: AlertTriangle, color: '#f97316' },
   'En retard': { badge: 'badge-danger', icon: AlertTriangle, color: '#ef4444' },
   'En attente': { badge: 'badge-warning', icon: Clock, color: '#f59e0b' },
 }
@@ -183,18 +184,18 @@ function Payments() {
 
   const currentMonth = allPayments.filter(p => (p.date || '').startsWith('2026-04'))
   const totalDue = currentMonth.reduce((s, p) => s + p.amount, 0)
-  const totalPaid = currentMonth.filter(p => p.status === 'Payé').reduce((s, p) => s + p.amount, 0)
-  const totalUnpaid = currentMonth.filter(p => p.status === 'En retard').reduce((s, p) => s + p.amount, 0)
+  const totalPaid = currentMonth.filter(p => p.status === 'Payé' || p.status === 'Partiel').reduce((s, p) => s + (p.amountPaid || p.amount), 0)
+  const totalUnpaid = currentMonth.filter(p => p.status === 'En retard' || p.status === 'Partiel').reduce((s, p) => s + (p.amount - (p.amountPaid || 0)), 0)
   const collectionRate = totalDue > 0 ? Math.round((totalPaid / totalDue) * 100) : 0
-  const pieData = [{ name: 'Payé', value: totalPaid || 1, color: '#10b981' }, { name: 'En retard', value: totalUnpaid || 0, color: '#ef4444' }]
+  const pieData = [{ name: 'Encaissé', value: totalPaid || 1, color: '#10b981' }, { name: 'Impayé', value: totalUnpaid || 0, color: '#ef4444' }]
 
   // Calcul des données réelles pour le graphique d'évolution (6 derniers mois)
   const months = ['Nov', 'Déc', 'Jan', 'Fév', 'Mar', 'Avr']
   const monthPrefixes = ['2025-11', '2025-12', '2026-01', '2026-02', '2026-03', '2026-04']
   const chartData = monthPrefixes.map((prefix, i) => {
     const monthPayments = allPayments.filter(p => (p.date || '').startsWith(prefix))
-    const encaisse = monthPayments.filter(p => p.status === 'Payé').reduce((s, p) => s + p.amount, 0)
-    const impaye = monthPayments.filter(p => p.status === 'En retard').reduce((s, p) => s + p.amount, 0)
+    const encaisse = monthPayments.filter(p => p.status === 'Payé' || p.status === 'Partiel').reduce((s, p) => s + (p.amountPaid || p.amount), 0)
+    const impaye = monthPayments.filter(p => p.status === 'En retard' || p.status === 'Partiel').reduce((s, p) => s + (p.amount - (p.amountPaid || 0)), 0)
     return { month: months[i], encaissé: encaisse, impayé: impaye }
   })
 
@@ -283,7 +284,7 @@ function Payments() {
       <div className="filter-bar">
         <div className="search-bar"><Search size={16} /><input type="text" placeholder="Rechercher..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
         <div className="tabs" style={{ marginBottom: 0, borderBottom: 'none' }}>
-          {['Tous', 'Payé', 'En retard'].map(tab => (<button key={tab} className={`tab ${activeTab === tab ? 'active' : ''}`} onClick={() => setActiveTab(tab)}>{tab}</button>))}
+          {['Tous', 'Payé', 'Partiel', 'En retard'].map(tab => (<button key={tab} className={`tab ${activeTab === tab ? 'active' : ''}`} onClick={() => setActiveTab(tab)}>{tab}</button>))}
         </div>
       </div>
 
@@ -296,7 +297,14 @@ function Payments() {
             return (<tr key={payment.id}>
               <td><div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}><div className="avatar avatar-sm" style={{ background: payment.status === 'En retard' ? 'linear-gradient(135deg, #ef4444, #f97316)' : 'linear-gradient(135deg, #10b981, #06b6d4)', color: '#fff' }}>{(payment.tenantName || '').split(' ').map(n => n[0]).join('')}</div><span style={{ fontWeight: 600 }}>{payment.tenantName}</span></div></td>
               <td style={{ color: 'var(--text-secondary)' }}>{payment.propertyName}</td>
-              <td style={{ fontWeight: 700, color: payment.status === 'En retard' ? 'var(--danger)' : 'var(--accent-gold)' }}>{formatFCFA(payment.amount)}</td>
+              <td style={{ fontWeight: 700, color: payment.status === 'En retard' ? 'var(--danger)' : 'var(--accent-gold)' }}>
+                {payment.status === 'Partiel' ? (
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span>{formatFCFA(payment.amountPaid)}</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500 }}>sur {formatFCFA(payment.amount)}</span>
+                  </div>
+                ) : formatFCFA(payment.amount)}
+              </td>
               <td><span className={`badge badge-dot ${config.badge}`}>{payment.status}</span></td>
               <td style={{ color: 'var(--text-muted)', fontSize: 'var(--font-xs)' }}>{payment.date}</td>
               <td style={{ color: 'var(--text-secondary)' }}>{payment.method}</td>

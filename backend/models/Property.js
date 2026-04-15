@@ -19,12 +19,16 @@ const Property = sequelize.define('Property', {
     type: DataTypes.STRING,
     defaultValue: '',
   },
+  category: {
+    type: DataTypes.ENUM('Résidentiel', 'Commercial', 'Terrain'),
+    defaultValue: 'Résidentiel',
+  },
   type: {
-    type: DataTypes.ENUM('Appartement', 'Villa', 'Studio', 'Bureau', 'Duplex'),
+    type: DataTypes.STRING,
     defaultValue: 'Appartement',
   },
   status: {
-    type: DataTypes.ENUM('Loué', 'Disponible', 'En travaux'),
+    type: DataTypes.ENUM('Loué', 'Disponible', 'En travaux', 'Partiellement Loué', 'Complet'),
     defaultValue: 'Disponible',
   },
   price: {
@@ -46,6 +50,16 @@ const Property = sequelize.define('Property', {
   tenantName: {
     type: DataTypes.STRING,
     allowNull: true,
+  },
+  // --- Hiérarchie ---
+  parentId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    defaultValue: null,
+  },
+  maxTenants: {
+    type: DataTypes.INTEGER,
+    defaultValue: 1,
   },
 }, {
   tableName: 'properties',

@@ -1,5 +1,6 @@
 import { Charge, Property, Tenant } from '../models/index.js'
 import { Op } from 'sequelize'
+import { runAccountingSync } from './accountingController.js'
 
 export async function getAll(req, res) {
   try {
@@ -46,6 +47,11 @@ export async function create(req, res) {
       tenantId,
       propertyId: propertyId === 'all' ? null : propertyId,
     })
+
+    if (charge.status === 'Payé' || charge.status === 'Régularisé') {
+      try { await runAccountingSync() } catch (err) { console.error('Accounting sync error:', err) }
+    }
+
     res.status(201).json(charge)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -57,6 +63,11 @@ export async function update(req, res) {
     const charge = await Charge.findByPk(req.params.id)
     if (!charge) return res.status(404).json({ error: 'Charge non trouvée.' })
     await charge.update(req.body)
+
+    if (charge.status === 'Payé' || charge.status === 'Régularisé') {
+      try { await runAccountingSync() } catch (err) { console.error('Accounting sync error:', err) }
+    }
+
     res.json(charge)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -70,6 +81,9 @@ export async function settle(req, res) {
 
     const newStatus = charge.category === 'tenant' ? 'Régularisé' : 'Payé'
     await charge.update({ status: newStatus })
+
+    try { await runAccountingSync() } catch (err) { console.error('Accounting sync error:', err) }
+
     res.json(charge)
   } catch (err) {
     res.status(500).json({ error: err.message })

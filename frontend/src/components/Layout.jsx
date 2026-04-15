@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { clearToken, notifications as notificationsApi, settings as settingsApi } from '../api'
 import {
   LayoutDashboard, Building2, Users, Receipt, Contact,
-  CreditCard, Bell, Search, Settings, Sun, Moon, LogOut
+  CreditCard, BookOpen, Bell, Search, Settings, Sun, Moon, LogOut
 } from 'lucide-react'
 
 const navItems = [
@@ -13,6 +13,7 @@ const navItems = [
   { path: '/crm', label: 'CRM', icon: Users },
   { path: '/charges', label: 'Charges', icon: Receipt },
   { path: '/paiements', label: 'Paiements', icon: CreditCard },
+  { path: '/comptabilite', label: 'Compta', icon: BookOpen },
 ]
 
 function Layout() {

@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { isAuthenticated } from './api'
 import Layout from './components/Layout'
+import Welcome from './pages/Welcome'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Properties from './pages/Properties'
@@ -8,12 +9,13 @@ import CRM from './pages/CRM'
 import Tenants from './pages/Tenants'
 import Charges from './pages/Charges'
 import Payments from './pages/Payments'
+import Accounting from './pages/Accounting'
 import SettingsPage from './pages/Settings'
 import PortailLocataire from './pages/PortailLocataire'
 
 function ProtectedRoute({ children }) {
   if (!isAuthenticated()) {
-    return <Navigate to="/login" replace />
+    return <Navigate to="/welcome" replace />
   }
   return children
 }
@@ -21,7 +23,8 @@ function ProtectedRoute({ children }) {
 function App() {
   return (
     <Routes>
-      {/* Route Publique: Login */}
+      {/* Route Publique: Welcome & Login */}
+      <Route path="/welcome" element={<Welcome />} />
       <Route path="/login" element={<Login />} />
 
       {/* Route Publique: Portail Locataire */}
@@ -39,6 +42,7 @@ function App() {
         <Route path="/crm" element={<CRM />} />
         <Route path="/charges" element={<Charges />} />
         <Route path="/paiements" element={<Payments />} />
+        <Route path="/comptabilite" element={<Accounting />} />
         <Route path="/parametres" element={<SettingsPage />} />
       </Route>
     </Routes>

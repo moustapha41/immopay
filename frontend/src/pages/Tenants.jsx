@@ -25,6 +25,12 @@ export default function Tenants() {
   const [addFormDate, setAddFormDate] = useState(new Date().toISOString().split('T')[0])
   const [confirmPaymentModal, setConfirmPaymentModal] = useState(false)
   const [newlyCreatedTenant, setNewlyCreatedTenant] = useState(null)
+  const [settleModal, setSettleModal] = useState(null)
+
+  // ── États pour la sélection de bien avancée ──
+  const [selectedAddProperty, setSelectedAddProperty] = useState(null)
+  const [propertyOccupancy, setPropertyOccupancy] = useState(null)
+  const [selectedFloor, setSelectedFloor] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -64,12 +70,19 @@ export default function Tenants() {
         rent: parseInt(formData.get('rent')),
         depositAmount: parseInt(formData.get('depositAmount')),
         dateEntree: formData.get('dateEntree'),
+        floor: selectedFloor || null,
       })
       setLocalTenants([created, ...localTenants])
       setIsAddModalOpen(false)
+      setSelectedAddProperty(null)
+      setPropertyOccupancy(null)
+      setSelectedFloor('')
       setNewlyCreatedTenant(created)
       setConfirmPaymentModal(true)
       setToastMessage(`Le locataire ${created.firstName} a été ajouté.`)
+      // Recharger les biens pour mettre à jour les statuts
+      const updatedProps = await propertiesApi.getAll()
+      setAllProperties(updatedProps)
     } catch (err) {
       setToastMessage('Erreur: ' + err.message)
     }
@@ -120,29 +133,53 @@ export default function Tenants() {
     setTimeout(() => setToastMessage(''), 4000)
   }
 
-  const handleSettle = async (tenantId, tenantName) => {
+  const handleSettleClick = (tenant) => {
+    const tenantPayments = localPayments.filter(p => p.tenantId === tenant.id)
+    const unpaidPayment = tenantPayments.find(p => ['En retard', 'Partiel'].includes(p.status))
+    if (!unpaidPayment) return
+    const missing = unpaidPayment.amount - (unpaidPayment.amountPaid || 0)
+    setSettleModal({ tenant, missing, method: 'Espèces', defaultAmount: missing })
+  }
+
+  const handleSettleSubmit = async (e) => {
+    e.preventDefault()
+    const formData = new FormData(e.target)
+    const amountPaid = parseInt(formData.get('amountPaid'))
+    const method = formData.get('method')
+    
     try {
-      await tenantsApi.settle(tenantId)
-      setLocalPayments(prev => prev.map(p => {
-        if (p.tenantId === tenantId && p.status === 'En retard') {
-          return { ...p, status: 'Payé', method: 'Espèces' }
-        }
-        return p
-      }))
-      setToastMessage(`Paiement enregistré pour ${tenantName}.`)
+      await tenantsApi.settle(settleModal.tenant.id, { amountPaid, method })
+      const updatedPayments = await paymentsApi.getAll()
+      setLocalPayments(updatedPayments)
+      setToastMessage(`Paiement enregistré pour ${settleModal.tenant.firstName}.`)
+      setSettleModal(null)
     } catch (err) {
       setToastMessage('Erreur: ' + err.message)
     }
     setTimeout(() => setToastMessage(''), 3000)
   }
 
-  const handlePropertyChange = (e) => {
+  const handlePropertyChange = async (e) => {
     const propId = parseInt(e.target.value)
     const prop = allProperties.find(p => p.id === propId)
+    setSelectedAddProperty(prop || null)
+    setSelectedFloor('')
+    setPropertyOccupancy(null)
+
     if (prop && prop.price) {
       setAddFormRent(prop.price)
     } else {
       setAddFormRent('')
+    }
+
+    // Charger les infos d'occupation si c'est un Immeuble ou une Colocation
+    if (prop && (prop.type === 'Immeuble' || prop.type === 'Colocation')) {
+      try {
+        const occ = await propertiesApi.getOccupancy(prop.id)
+        setPropertyOccupancy(occ)
+      } catch (err) {
+        setToastMessage('Erreur chargement occupation: ' + err.message)
+      }
     }
   }
 
@@ -152,6 +189,9 @@ export default function Tenants() {
         await tenantsApi.remove(id)
         setLocalTenants(localTenants.filter(t => t.id !== id))
         setToastMessage('Locataire supprimé avec succès.')
+        // Recharger les biens pour mettre à jour les statuts
+        const updatedProps = await propertiesApi.getAll()
+        setAllProperties(updatedProps)
       } catch (err) {
         setToastMessage('Erreur: ' + err.message)
       }
@@ -186,6 +226,39 @@ export default function Tenants() {
     setTimeout(() => setToastMessage(''), 4000)
   }
 
+  // ── Propriétés disponibles pour la création (exclure Loué et Complet) ──
+  const availableProperties = allProperties.filter(p =>
+    p.status !== 'Loué' && p.status !== 'Complet'
+  )
+
+  // ── Générer la liste des étages pour un immeuble ──
+  const getAvailableFloors = () => {
+    if (!selectedAddProperty || selectedAddProperty.type !== 'Immeuble') return []
+    const levelsMatch = (selectedAddProperty.title || '').match(/R\+(\d+)/)
+    let maxLevel = levelsMatch ? parseInt(levelsMatch[1]) : (selectedAddProperty.maxTenants > 0 ? selectedAddProperty.maxTenants - 1 : 1)
+    
+    // Si pour une raison quelconque maxLevel est trop bas, on s'assure qu'il couvre au moins les étages déjà loués
+    if (propertyOccupancy && propertyOccupancy.occupiedFloors) {
+      const maxOccupied = Math.max(0, ...propertyOccupancy.occupiedFloors.map(f => {
+        if (!f) return 0;
+        const m = f.match(/R\+(\d+)/);
+        return m ? parseInt(m[1]) : 0;
+      }));
+      if (maxOccupied > maxLevel) maxLevel = maxOccupied;
+    }
+
+    const allFloors = ['RDC (Rez-de-chaussée)']
+    for (let i = 1; i <= maxLevel; i++) {
+      allFloors.push(`R+${i}`)
+    }
+    const occupiedFloors = propertyOccupancy ? propertyOccupancy.occupiedFloors : []
+    return allFloors.map(floor => ({
+      value: floor,
+      label: floor,
+      occupied: occupiedFloors.includes(floor)
+    }))
+  }
+
   const filtered = localTenants.filter(t =>
     t.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     t.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -198,7 +271,7 @@ export default function Tenants() {
     <div className="animate-fade-in">
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div><h1>Locataires</h1><p>Gestion des baux, accès portail et règlements</p></div>
-        <button className="btn btn-primary" onClick={() => setIsAddModalOpen(true)}><Plus size={16} /> Nouveau locataire</button>
+        <button className="btn btn-primary" onClick={() => { setIsAddModalOpen(true); setSelectedAddProperty(null); setPropertyOccupancy(null); setSelectedFloor('') }}><Plus size={16} /> Nouveau locataire</button>
       </div>
 
       <div className="stats-grid stagger" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
@@ -233,9 +306,16 @@ export default function Tenants() {
                   <td><span className="badge badge-success">{tenant.status}</span></td>
                   <td>
                     <div style={{ display: 'flex', gap: 'var(--space-xs)', justifyContent: 'flex-end' }}>
-                      {unpaidCount > 0 && <button className="btn btn-primary btn-sm" onClick={() => handleSettle(tenant.id, tenant.firstName)}><BanknoteIcon size={14} style={{ marginRight: 4 }} /> Régler</button>}
+                      {unpaidCount > 0 && <button className="btn btn-primary btn-sm" onClick={() => handleSettleClick(tenant)}><BanknoteIcon size={14} style={{ marginRight: 4 }} /> Régler</button>}
                       <button className="icon-btn" title="Copier le lien" onClick={() => handleCopyLink(tenant.token)}><Link size={15} /></button>
-                      <button className="icon-btn" title="Voir la fiche" onClick={() => setSelectedTenant(tenant)}><Eye size={15} /></button>
+                      <button className="icon-btn" title="Voir la fiche" onClick={async () => {
+                        try {
+                          const fullTenant = await tenantsApi.getById(tenant.id)
+                          setSelectedTenant(fullTenant)
+                        } catch (err) {
+                          setToastMessage('Erreur: ' + err.message)
+                        }
+                      }}><Eye size={15} /></button>
                       <button className="icon-btn" title="Modifier" onClick={() => handleEditTenant(tenant)}><Edit size={15} /></button>
                       <button className="icon-btn" title="Supprimer" onClick={() => handleDeleteTenant(tenant.id)}><Trash size={15} style={{ color: 'var(--danger)' }} /></button>
                     </div>
@@ -262,16 +342,24 @@ export default function Tenants() {
                   </div>
                 </div>
               </div>
-              <div className="stats-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 'var(--space-md)' }}>
+              <div className="stats-grid" style={{ gridTemplateColumns: '1fr', gap: 'var(--space-md)' }}>
                 <div style={{ padding: 'var(--space-md)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)' }}>
-                  <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Bien</div>
-                  <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Home size={14} color="var(--accent-primary)"/> {selectedTenant.propertyName}</div>
-                  <div style={{ fontSize: 'var(--font-sm)', color: 'var(--text-secondary)', marginTop: 4 }}>Bail: {selectedTenant.bailNumber}</div>
-                </div>
-                <div style={{ padding: 'var(--space-md)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)' }}>
-                  <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Finances</div>
-                  <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><BanknoteIcon size={14} color="var(--accent-gold)"/> Loyer : {formatFCFA(selectedTenant.rent)}</div>
-                  <div style={{ fontSize: 'var(--font-sm)', color: 'var(--text-secondary)', marginTop: 4 }}>Caution : {formatFCFA(selectedTenant.depositAmount)}</div>
+                  <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: 'var(--space-sm)' }}>Historique des Baux</div>
+                  {selectedTenant.leases && selectedTenant.leases.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xs)' }}>
+                      {selectedTenant.leases.map(lease => (
+                        <div key={lease.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--space-sm)', background: '#fff', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)' }}>
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 'var(--font-sm)', display: 'flex', alignItems: 'center', gap: 6 }}><Home size={14} color="var(--accent-primary)"/> {lease.property?.title || 'Bien inconnu'}{lease.floor ? ` · ${lease.floor}` : ''}</div>
+                            <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)' }}>Bail: {lease.bailNumber} • {formatFCFA(lease.rent)}</div>
+                          </div>
+                          <div>
+                            <span className={`badge ${lease.status === 'Actif' ? 'badge-success' : 'badge-warning'}`}>{lease.status}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <div style={{ fontSize: 'var(--font-sm)', color: 'var(--text-muted)' }}>Aucun bail enregistré.</div>}
                 </div>
               </div>
               <div style={{ background: 'rgba(212,168,67,0.1)', border: '1px solid rgba(212,168,67,0.2)', padding: 'var(--space-md)', borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -300,7 +388,7 @@ export default function Tenants() {
         })()}
       </Modal>
 
-      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Enregistrer un locataire">
+      <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setSelectedAddProperty(null); setPropertyOccupancy(null); setSelectedFloor('') }} title="Enregistrer un locataire">
         <form onSubmit={handleAddTenant} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
           <div className="grid-2">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}><label style={{ fontSize: 'var(--font-sm)', fontWeight: 600 }}>Prénom</label><input type="text" name="firstName" required placeholder="Ex: Moussa" /></div>
@@ -311,9 +399,118 @@ export default function Tenants() {
               <label style={{ fontSize: 'var(--font-sm)', fontWeight: 600 }}>Cibler un bien</label>
               <select name="propertyId" required onChange={handlePropertyChange}>
                 <option value="">Sélectionnez un bien...</option>
-                {allProperties.map(p => <option key={p.id} value={p.id}>{p.title} — {p.address}</option>)}
+                {availableProperties.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.title} — {p.address}
+                    {p.status === 'Partiellement Loué' ? ' (Partiellement loué)' : ''}
+                  </option>
+                ))}
               </select>
+              {allProperties.length > 0 && availableProperties.length === 0 && (
+                <small style={{ color: 'var(--danger)', fontWeight: 500 }}>Aucun bien disponible. Tous les biens sont loués ou complets.</small>
+              )}
             </div>
+
+            {/* ── Info d'occupation pour Immeuble ou Colocation ── */}
+            {selectedAddProperty && propertyOccupancy && (
+              <div style={{ gridColumn: '1 / -1', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.15)', borderRadius: 'var(--radius-md)', padding: 'var(--space-md)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-sm)' }}>
+                  <div style={{ fontWeight: 600, fontSize: 'var(--font-sm)', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {selectedAddProperty.type === 'Immeuble' ? '🏢' : '👥'} Occupation — {selectedAddProperty.title}
+                  </div>
+                  <span className={`badge ${
+                    propertyOccupancy.occupiedCount === 0 ? 'badge-primary' :
+                    propertyOccupancy.availableCount === 0 ? 'badge-danger' : 'badge-info'
+                  }`}>
+                    {propertyOccupancy.occupiedCount === 0 ? 'Disponible' :
+                     propertyOccupancy.availableCount === 0 ? 'Complet' : 'Partiellement Loué'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: 'var(--space-lg)', fontSize: 'var(--font-sm)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, padding: 'var(--space-sm)', background: 'rgba(255,255,255,0.6)', borderRadius: 'var(--radius-sm)' }}>
+                    <span style={{ fontWeight: 700, fontSize: 'var(--font-lg)', color: 'var(--text-primary)' }}>{propertyOccupancy.totalUnits}</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-xs)' }}>{selectedAddProperty.type === 'Immeuble' ? 'Étages total' : 'Places totales'}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, padding: 'var(--space-sm)', background: 'rgba(239,68,68,0.06)', borderRadius: 'var(--radius-sm)' }}>
+                    <span style={{ fontWeight: 700, fontSize: 'var(--font-lg)', color: 'var(--danger)' }}>{propertyOccupancy.occupiedCount}</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-xs)' }}>{selectedAddProperty.type === 'Immeuble' ? 'Étages occupés' : 'Places occupées'}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, padding: 'var(--space-sm)', background: 'rgba(16,185,129,0.06)', borderRadius: 'var(--radius-sm)' }}>
+                    <span style={{ fontWeight: 700, fontSize: 'var(--font-lg)', color: 'var(--success)' }}>{propertyOccupancy.availableCount}</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-xs)' }}>{selectedAddProperty.type === 'Immeuble' ? 'Étages disponibles' : 'Places disponibles'}</span>
+                  </div>
+                </div>
+                {/* Détail des locataires par étage/place */}
+                {propertyOccupancy.activeLeases && propertyOccupancy.activeLeases.length > 0 && (
+                  <div style={{ marginTop: 'var(--space-sm)', fontSize: 'var(--font-xs)', color: 'var(--text-secondary)' }}>
+                    {propertyOccupancy.activeLeases.map((l, i) => (
+                      <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(239,68,68,0.08)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', marginRight: 6, marginBottom: 4 }}>
+                        {l.floor ? `${l.floor}:` : '•'} {l.tenant}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Sélection d'étage pour les Immeubles ── */}
+            {selectedAddProperty && selectedAddProperty.type === 'Immeuble' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, gridColumn: '1 / -1' }}>
+                <label style={{ fontSize: 'var(--font-sm)', fontWeight: 600 }}>Étage à louer</label>
+                <div style={{ display: 'flex', gap: 'var(--space-sm)', flexWrap: 'wrap' }}>
+                  {getAvailableFloors().map(floor => (
+                    <button
+                      key={floor.value}
+                      type="button"
+                      disabled={floor.occupied}
+                      onClick={() => setSelectedFloor(floor.value)}
+                      style={{
+                        padding: '10px 18px',
+                        borderRadius: 'var(--radius-md)',
+                        cursor: floor.occupied ? 'not-allowed' : 'pointer',
+                        fontWeight: 600,
+                        fontSize: 'var(--font-sm)',
+                        border: selectedFloor === floor.value
+                          ? '2px solid var(--accent-primary)'
+                          : floor.occupied
+                          ? '1.5px solid var(--border-color)'
+                          : '1.5px solid var(--border-color)',
+                        background: selectedFloor === floor.value
+                          ? 'rgba(59,130,246,0.12)'
+                          : floor.occupied
+                          ? 'rgba(239,68,68,0.06)'
+                          : 'var(--bg-secondary)',
+                        color: selectedFloor === floor.value
+                          ? 'var(--accent-primary)'
+                          : floor.occupied
+                          ? 'var(--text-muted)'
+                          : 'var(--text-secondary)',
+                        opacity: floor.occupied ? 0.6 : 1,
+                        transition: 'all 0.2s ease',
+                        position: 'relative',
+                        textDecoration: floor.occupied ? 'line-through' : 'none',
+                      }}
+                    >
+                      {floor.label}
+                      {floor.occupied && (
+                        <span style={{
+                          position: 'absolute', top: -6, right: -6,
+                          background: 'var(--danger)', color: '#fff',
+                          fontSize: '9px', padding: '1px 5px', borderRadius: '10px',
+                          fontWeight: 700,
+                        }}>Loué</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+                {selectedFloor && (
+                  <small style={{ color: 'var(--success)', fontWeight: 500 }}>
+                    ✓ Étage sélectionné : <strong>{selectedFloor}</strong>
+                  </small>
+                )}
+              </div>
+            )}
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <label style={{ fontSize: 'var(--font-sm)', fontWeight: 600 }}>Loyer (FCFA)</label>
               <input type="number" name="rent" required placeholder="Ex: 250000" value={addFormRent} onChange={(e) => setAddFormRent(e.target.value)} />
@@ -325,7 +522,7 @@ export default function Tenants() {
             </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-md)', marginTop: 'var(--space-md)' }}>
-            <button type="button" className="btn btn-ghost" onClick={() => setIsAddModalOpen(false)}>Annuler</button>
+            <button type="button" className="btn btn-ghost" onClick={() => { setIsAddModalOpen(false); setSelectedAddProperty(null); setPropertyOccupancy(null); setSelectedFloor('') }}>Annuler</button>
             <button type="submit" className="btn btn-primary">Créer le bail</button>
           </div>
         </form>
@@ -381,6 +578,35 @@ export default function Tenants() {
               </button>
             </div>
           </div>
+        )}
+      </Modal>
+
+      <Modal isOpen={!!settleModal} onClose={() => setSettleModal(null)} title="Encaisser un paiement">
+        {settleModal && (
+          <form onSubmit={handleSettleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
+            <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+               <div style={{ color: '#64748b', fontSize: '13px', fontWeight: 600, textTransform: 'uppercase' }}>Reste à payer</div>
+               <div style={{ color: '#ef4444', fontSize: '24px', fontWeight: 700 }}>{formatFCFA(settleModal.missing)}</div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label style={{ fontSize: 'var(--font-sm)', fontWeight: 600 }}>Montant reçu (FCFA)</label>
+              <input type="number" name="amountPaid" required min="1" max={settleModal.missing} defaultValue={settleModal.missing} />
+              <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Si le montant est inférieur au reste à payer, le paiement sera marqué comme "Partiel".</p>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label style={{ fontSize: 'var(--font-sm)', fontWeight: 600 }}>Méthode de paiement</label>
+              <select name="method" required defaultValue="Espèces">
+                <option value="Espèces">Espèces</option>
+                <option value="Virement Bancaire">Virement Bancaire</option>
+                <option value="Chèque">Chèque</option>
+                <option value="Mobile Money">Mobile Money (Orange/Wave...)</option>
+              </select>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-md)', marginTop: 'var(--space-md)' }}>
+              <button type="button" className="btn btn-ghost" onClick={() => setSettleModal(null)}>Annuler</button>
+              <button type="submit" className="btn btn-primary">Enregistrer le paiement</button>
+            </div>
+          </form>
         )}
       </Modal>
 

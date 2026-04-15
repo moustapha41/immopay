@@ -1,6 +1,7 @@
 import { Payment, Tenant, Settings, Notification } from '../models/index.js'
 import { Op } from 'sequelize'
 import { createInAppNotification, sendEventEmail, getOrCreateSettings } from '../services/notificationService.js'
+import { runAccountingSync } from './accountingController.js'
 
 export async function getAll(req, res) {
   try {
@@ -47,6 +48,15 @@ export async function create(req, res) {
         html: `<p>Bonjour ${tenant.firstName || ''},</p><p>Nous confirmons la réception de votre paiement de <strong>${payment.amount} FCFA</strong> pour le bien <strong>${payment.propertyName}</strong>.</p>`,
         metadata: { paymentId: payment.id },
       })
+    }
+
+    // Auto-sync with accounting
+    if (payment.status === 'Payé') {
+      try {
+        await runAccountingSync()
+      } catch (syncErr) {
+        console.error('Accounting sync error:', syncErr)
+      }
     }
 
     res.status(201).json(payment)

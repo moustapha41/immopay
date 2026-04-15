@@ -1,4 +1,4 @@
-const API_BASE = '/api'
+const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
 // Get stored JWT token
 function getToken() {
@@ -61,12 +61,31 @@ export const properties = {
     return request(`/properties${q ? `?${q}` : ''}`)
   },
   getById: (id) => request(`/properties/${id}`),
+  getChildren: (id) => request(`/properties/${id}/children`),
+  getOccupancy: (id) => request(`/properties/${id}/occupancy`),
   create: (data) =>
     request('/properties', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) =>
     request(`/properties/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   remove: (id) =>
     request(`/properties/${id}`, { method: 'DELETE' }),
+}
+
+// ==================== LEASES (BAUX) ====================
+export const leases = {
+  getAll: (params = {}) => {
+    const q = new URLSearchParams(params).toString()
+    return request(`/leases${q ? `?${q}` : ''}`)
+  },
+  getById: (id) => request(`/leases/${id}`),
+  create: (data) =>
+    request('/leases', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id, data) =>
+    request(`/leases/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  terminate: (id) =>
+    request(`/leases/${id}/terminate`, { method: 'PUT' }),
+  remove: (id) =>
+    request(`/leases/${id}`, { method: 'DELETE' }),
 }
 
 // ==================== TENANTS ====================
@@ -147,13 +166,17 @@ export const dashboard = {
 
 // ==================== PORTAL (public) ====================
 export const portal = {
-  getData: (token) =>
-    fetch(`${API_BASE}/portal/${token}`).then(r => r.json()),
-  pay: (token, data) =>
-    fetch(`${API_BASE}/portal/${token}/pay`, {
+  getData: (token) => fetch(`${API_BASE}/portal/${token}`).then(r => r.json()),
+  paydunyaInit: (token, amount) =>
+    fetch(`${API_BASE}/portal/${token}/paydunya-init`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify({ amount }),
+    }).then(r => r.json()),
+  verifyManual: (token) =>
+    fetch(`${API_BASE}/portal/${token}/verify-payment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
     }).then(r => r.json()),
 }
 
@@ -173,4 +196,48 @@ export const notifications = {
   getAll: () => request('/notifications'),
   markAsRead: (id) => request(`/notifications/${id}/read`, { method: 'PUT' }),
   markAllAsRead: () => request('/notifications/read-all', { method: 'PUT' }),
+}
+
+// ==================== ACCOUNTING ====================
+export const accounting = {
+  // Accounts
+  getAccounts: (params = {}) => {
+    const q = new URLSearchParams(params).toString()
+    return request(`/accounting/accounts${q ? `?${q}` : ''}`)
+  },
+  createAccount: (data) => request('/accounting/accounts', { method: 'POST', body: JSON.stringify(data) }),
+  updateAccount: (id, data) => request(`/accounting/accounts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAccount: (id) => request(`/accounting/accounts/${id}`, { method: 'DELETE' }),
+
+  // Entries
+  getEntries: (params = {}) => {
+    const q = new URLSearchParams(params).toString()
+    return request(`/accounting/entries${q ? `?${q}` : ''}`)
+  },
+  createEntry: (data) => request('/accounting/entries', { method: 'POST', body: JSON.stringify(data) }),
+  updateEntry: (id, data) => request(`/accounting/entries/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  validateEntry: (id) => request(`/accounting/entries/${id}/validate`, { method: 'PUT' }),
+  deleteEntry: (id) => request(`/accounting/entries/${id}`, { method: 'DELETE' }),
+
+  // Reports
+  getLedger: (params = {}) => {
+    const q = new URLSearchParams(params).toString()
+    return request(`/accounting/ledger${q ? `?${q}` : ''}`)
+  },
+  getTrialBalance: (params = {}) => {
+    const q = new URLSearchParams(params).toString()
+    return request(`/accounting/balance${q ? `?${q}` : ''}`)
+  },
+  getIncomeStatement: (params = {}) => {
+    const q = new URLSearchParams(params).toString()
+    return request(`/accounting/income-statement${q ? `?${q}` : ''}`)
+  },
+  getBalanceSheet: (params = {}) => {
+    const q = new URLSearchParams(params).toString()
+    return request(`/accounting/balance-sheet${q ? `?${q}` : ''}`)
+  },
+  getDashboard: () => request('/accounting/dashboard'),
+
+  // Sync
+  syncOperations: () => request('/accounting/sync', { method: 'POST' }),
 }

@@ -1,4 +1,4 @@
-import { Property, Tenant, Payment, Prospect, Charge } from '../models/index.js'
+import { Property, Tenant, Payment, Prospect, Charge, Lease } from '../models/index.js'
 import { Op } from 'sequelize'
 import sequelize from '../config/db.js'
 
@@ -8,14 +8,26 @@ export async function getDashboard(req, res) {
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
     const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
 
-    const totalProperties = await Property.count()
-    const occupiedProperties = await Property.count({ where: { status: 'Loué' } })
+    // Compter les biens racines uniquement (pas les enfants)
+    const totalProperties = await Property.count({ where: { parentId: null } })
+
+    // Biens occupés : statut Loué, Partiellement Loué ou Complet
+    const occupiedProperties = await Property.count({
+      where: {
+        parentId: null,
+        status: { [Op.in]: ['Loué', 'Partiellement Loué', 'Complet'] }
+      }
+    })
     const occupancyRate = totalProperties > 0 ? Math.round((occupiedProperties / totalProperties) * 100) : 0
 
     const activeTenants = await Tenant.count({ where: { status: 'Actif' } })
     const activeProspects = await Prospect.count()
 
-    // Revenue this month
+    // Baux actifs — revenus attendus mensuels
+    const activeLeases = await Lease.findAll({ where: { status: 'Actif' } })
+    const expectedMonthlyRevenue = activeLeases.reduce((sum, l) => sum + (l.rent || 0), 0)
+
+    // Revenue this month (paiements effectués)
     const monthPayments = await Payment.findAll({
       where: {
         date: { [Op.gte]: `${currentMonth}-01`, [Op.lte]: `${currentMonth}-${lastDayOfMonth}` },
@@ -28,6 +40,16 @@ export async function getDashboard(req, res) {
 
     const unpaidPayments = monthPayments.filter(p => p.status === 'En retard')
     const unpaidTotal = unpaidPayments.reduce((sum, p) => sum + p.amount, 0)
+
+    // Nombre total d'unités louables (biens sans enfants = unités terminales)
+    const totalUnits = await Property.count({
+      where: {
+        [Op.or]: [
+          // Biens simples sans enfants (pas un parent)
+          sequelize.literal(`"Property"."id" NOT IN (SELECT DISTINCT "parent_id" FROM "properties" WHERE "parent_id" IS NOT NULL)`),
+        ]
+      }
+    })
 
     // Recent activity — last 10 payments
     const recentPayments = await Payment.findAll({
@@ -42,14 +64,20 @@ export async function getDashboard(req, res) {
       type: 'payment',
     }))
 
+    // Nombre de baux actifs
+    const activeLeaseCount = await Lease.count({ where: { status: 'Actif' } })
+
     res.json({
       totalProperties,
       occupancyRate,
       totalRevenue,
+      expectedMonthlyRevenue,
       unpaidCount: unpaidPayments.length,
       unpaidTotal,
       activeProspects,
       activeTenants,
+      activeLeaseCount,
+      totalUnits,
       recentActivity,
     })
   } catch (err) {

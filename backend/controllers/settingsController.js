@@ -1,4 +1,4 @@
-import { Settings, Property, Tenant, Prospect, Payment, Charge, Notification } from '../models/index.js'
+import { Settings, Property, Tenant, Prospect, Payment, Charge, Notification, Account, JournalEntry, Lease } from '../models/index.js'
 
 export async function getSettings(req, res) {
   try {
@@ -48,8 +48,11 @@ export async function resetSystem(req, res) {
   try {
     // Vider les tables métiers
     await Notification.destroy({ where: {} })
+    await JournalEntry.destroy({ where: {} })
+    await Account.destroy({ where: {} })
     await Payment.destroy({ where: {} })
     await Charge.destroy({ where: {} })
+    await Lease.destroy({ where: {} })
     await Prospect.destroy({ where: {} })
     await Tenant.destroy({ where: {} })
     await Property.destroy({ where: {} })

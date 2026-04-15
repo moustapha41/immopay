@@ -349,10 +349,10 @@ function Dashboard() {
 
         <div className="stat-card" id="stat-revenue">
           <div className="stat-card-icon gold"><CreditCard size={22} /></div>
-          <div className="stat-card-value">{formatFCFA(data.totalRevenue)}</div>
-          <div className="stat-card-label">Revenus ce mois</div>
+          <div className="stat-card-value">{formatFCFA(data.expectedMonthlyRevenue)}</div>
+          <div className="stat-card-label">Revenus attendus (baux)</div>
           <span className="stat-card-trend up">
-            <ArrowUpRight size={12} /> Encaissé
+            <ArrowUpRight size={12} /> {formatFCFA(data.totalRevenue)} encaissé
           </span>
         </div>
 
@@ -379,8 +379,8 @@ function Dashboard() {
 
         <div className="stat-card" id="stat-tenants">
           <div className="stat-card-icon indigo"><UserCheck size={22} /></div>
-          <div className="stat-card-value">{data.activeTenants}</div>
-          <div className="stat-card-label">Locataires actifs</div>
+          <div className="stat-card-value">{data.activeLeaseCount}</div>
+          <div className="stat-card-label">Baux actifs</div>
         </div>
       </div>
 
