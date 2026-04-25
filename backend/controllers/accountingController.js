@@ -4,10 +4,11 @@ import sequelize from '../config/db.js'
 
 // ==================== SEED PLAN COMPTABLE ====================
 async function ensureDefaultAccounts() {
-  const count = await Account.count()
-  if (count === 0) {
-    await Account.bulkCreate(Account.SYSCOHADA_DEFAULTS)
-  }
+  // Idempotent seed: avoids race condition when multiple requests
+  // hit accounting endpoints at the same time on a fresh database.
+  await Account.bulkCreate(Account.SYSCOHADA_DEFAULTS, {
+    ignoreDuplicates: true,
+  })
 }
 
 // ==================== ACCOUNTS ====================
