@@ -4,7 +4,7 @@ import {
   CreditCard, CheckCircle2, AlertTriangle, FileText,
   Clock, Download, Building2, MapPin, Loader2, ShieldCheck
 } from 'lucide-react'
-import { portal, settings as settingsApi } from '../api'
+import { portal } from '../api'
 
 function formatFCFA(amount) { return (amount || 0).toLocaleString('fr-FR') + ' FCFA' }
 
@@ -35,7 +35,7 @@ export default function PortailLocataire() {
 
         const [d, s] = await Promise.all([
           portal.getData(token),
-          settingsApi.get()
+          Promise.resolve({})
         ])
         if (d.error) { setError(d.error) }
         else { setData(d); setPayAmount(d.resteAPayer) }
