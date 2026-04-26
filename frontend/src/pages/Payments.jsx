@@ -165,16 +165,23 @@ function Payments() {
 
   const handlePrintQuittance = (payment) => {
     const agencyName = agencySettings.agencyName || 'ImmoSuite Sénégal'
+    const agencyLogo = agencySettings.logoUrl || ''
     const html = `<div style="font-family: Arial; padding: 40px; max-width: 800px; margin: 0 auto; color: #1e3a5f;">
       <div style="display: flex; justify-content: space-between; border-bottom: 2px solid #1e3a5f; padding-bottom: 20px; margin-bottom: 40px;">
         <div><h1 style="margin: 0; color: #d4a843;">QUITTANCE DE LOYER</h1></div>
-        <div style="text-align: right;"><h2 style="margin: 0;">${agencyName}</h2><p style="color: #64748b;">Édité le ${new Date().toLocaleDateString('fr-FR')}</p></div>
+        <div style="text-align: right; display: flex; align-items: center; gap: 12px;">
+          ${agencyLogo ? `<img src="${agencyLogo}" alt="Logo agence" style="max-height: 56px; max-width: 120px; object-fit: contain;" />` : ''}
+          <div>
+            <h2 style="margin: 0;">${agencyName}</h2>
+            <p style="color: #64748b;">Édité le ${new Date().toLocaleDateString('fr-FR')}</p>
+          </div>
+        </div>
       </div>
       <div style="display: flex; justify-content: space-between; margin-bottom: 40px;">
         <div style="background: #f1f5f9; padding: 20px; border-radius: 8px; width: 45%;"><p style="font-size: 12px; font-weight: bold; color: #64748b; margin-top: 0;">LOCATAIRE</p><p style="font-size: 18px; font-weight: bold; margin: 0;">${payment.tenantName}</p></div>
         <div style="background: #f1f5f9; padding: 20px; border-radius: 8px; width: 45%;"><p style="font-size: 12px; font-weight: bold; color: #64748b; margin-top: 0;">BIEN</p><p style="margin: 0;">${payment.propertyName}</p></div>
       </div>
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 40px;"><tr style="border-bottom: 1px solid #cbd5e1;"><th style="text-align: left; padding: 12px 0;">Désignation</th><th>Période</th><th style="text-align: right;">Montant</th></tr><tr><td style="padding: 12px 0;">Loyer + Charges</td><td>${(payment.date || '').substring(0, 7)}</td><td style="text-align: right; font-weight: bold;">${formatFCFA(payment.amount)}</td></tr></table>
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 40px;"><tr style="border-bottom: 1px solid #cbd5e1;"><th style="text-align: left; padding: 12px 0;">Désignation</th><th>Période</th><th style="text-align: right;">Montant</th></tr><tr><td style="padding: 12px 0;">Loyer + Charges</td><td>${payment.period || (payment.date || '').substring(0, 7)}</td><td style="text-align: right; font-weight: bold;">${formatFCFA(payment.amount)}</td></tr></table>
       <div style="background: #e0f2fe; padding: 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;"><div><p style="margin: 0; font-weight: bold;">Paiement reçu</p><p style="margin: 5px 0 0 0; font-size: 14px; color: #64748b;">Méthode: ${payment.method}</p></div><div style="font-size: 24px; font-weight: bold; color: #d4a843;">${formatFCFA(payment.amount)}</div></div>
     </div>`
     const w = window.open('', '_blank')
