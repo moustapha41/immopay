@@ -128,7 +128,8 @@ export async function paydunyaInit(req, res) {
       // PayDunya a bien généré la facture, on renvoie l'URL de paiement
       return res.json({ paydunya_url: data.response_text })
     } else {
-      return res.status(400).json({ error: 'Erreur lors de la création de la facture PayDunya.', details: data })
+      const paydunyaMessage = data?.response_text || 'Erreur lors de la création de la facture PayDunya.'
+      return res.status(400).json({ error: paydunyaMessage, details: data })
     }
 
   } catch (err) {

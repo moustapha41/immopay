@@ -59,7 +59,8 @@ export default function PortailLocataire() {
       if (response.paydunya_url) {
         window.location.href = response.paydunya_url
       } else if (response.error) {
-        setError(response.error)
+        const detailsMessage = response.details?.response_text
+        setError(detailsMessage || response.error)
         setIsPaying(false)
       }
     } catch (err) { 
