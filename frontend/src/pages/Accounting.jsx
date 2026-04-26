@@ -426,9 +426,14 @@ export default function Accounting() {
       )}
 
       {/* Modal Écriture */}
-      <Modal isOpen={isEntryModalOpen} onClose={() => setIsEntryModalOpen(false)} title="Saisie comptable (Écriture manuelle)">
+      <Modal
+        isOpen={isEntryModalOpen}
+        onClose={() => setIsEntryModalOpen(false)}
+        title="Saisie comptable (Écriture manuelle)"
+        maxWidth="860px"
+      >
         <form onSubmit={handleCreateEntry} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-          <div className="grid-2">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--space-md)' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label>Date</label>
               <input type="date" name="date" required defaultValue={new Date().toISOString().split('T')[0]} />
