@@ -65,6 +65,7 @@ async function start() {
       `DO $$ BEGIN ALTER TYPE "enum_properties_status" ADD VALUE IF NOT EXISTS 'Partiellement Loué'; EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,
       `DO $$ BEGIN ALTER TYPE "enum_properties_status" ADD VALUE IF NOT EXISTS 'Complet'; EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,
       `DO $$ BEGIN ALTER TYPE "enum_payments_status" ADD VALUE IF NOT EXISTS 'Partiel'; EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,
+      `DO $$ BEGIN ALTER TYPE "enum_payments_status" ADD VALUE IF NOT EXISTS 'En attente PayDunya'; EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,
     ]
     for (const sql of enumMigrations) {
       try { await sequelize.query(sql) } catch (e) { /* ignore if exists */ }

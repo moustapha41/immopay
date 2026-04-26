@@ -34,7 +34,7 @@ const Payment = sequelize.define('Payment', {
     defaultValue: 0,
   },
   status: {
-    type: DataTypes.ENUM('Payé', 'En retard', 'En attente', 'Partiel'),
+    type: DataTypes.ENUM('Payé', 'En retard', 'En attente', 'Partiel', 'En attente PayDunya'),
     defaultValue: 'En attente',
   },
   date: {
