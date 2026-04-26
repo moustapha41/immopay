@@ -1,4 +1,5 @@
 import { Tenant, Payment, Settings } from '../models/index.js'
+import { Op } from 'sequelize'
 
 
 export async function getPortalData(req, res) {
@@ -48,8 +49,8 @@ export async function getPortalData(req, res) {
   }
 }
 
-// ======= PAYDUNYA: Étape 1 - Création de la facture et récupération de l'URL =======
-export async function paydunyaInit(req, res) {
+// ======= PAYTECH: Étape 1 - Création de la facture et récupération de l'URL =======
+export async function paytechInit(req, res) {
   try {
     const { token } = req.params
     const { amount } = req.body
@@ -59,7 +60,7 @@ export async function paydunyaInit(req, res) {
 
     const currentMonth = new Date().toISOString().substring(0, 7)
     
-    // On prépare le paiement dans notre BDD mais avec un statut "En attente PayDunya"
+    // On prépare le paiement dans notre BDD avec un statut en attente.
     let payment = await Payment.findOne({
       where: { tenantId: tenant.id, period: currentMonth, status: 'En retard' }
     })
@@ -75,103 +76,105 @@ export async function paydunyaInit(req, res) {
         propertyId: tenant.propertyId,
         propertyName: tenant.propertyName,
         amount: amount || tenant.rent,
-        status: 'En attente PayDunya', // statut temporaire !
-        method: 'PayDunya',
+        status: 'En attente',
+        method: 'PayTech',
         date: new Date().toISOString().split('T')[0],
         quittance: false,
         period: currentMonth,
       })
     }
 
-    // Préparation de la requête vers l'API de PayDunya
-    const isTest = process.env.PAYDUNYA_MODE === 'test'
-    const paydunyaUrl = isTest 
-      ? 'https://app.paydunya.com/sandbox-api/v1/checkout-invoice/create'
-      : 'https://app.paydunya.com/api/v1/checkout-invoice/create'
-    
+    // Préparation de la requête vers l'API PayTech
+    const paytechUrl = process.env.PAYTECH_BASE_URL || 'https://paytech.sn/api/payment/request-payment'
+    const paytechEnv = (process.env.PAYTECH_MODE || 'test').toLowerCase() === 'prod' ? 'prod' : 'test'
     const frontUrl = process.env.FRONTEND_URL || 'http://localhost:3000'
     const backUrl = process.env.BACKEND_PUBLIC_URL || 'http://localhost:5000'
 
     const payload = {
-      invoice: {
-        total_amount: payment.amount,
-        description: `Loyer de ${currentMonth} pour ${tenant.firstName} ${tenant.lastName}`
-      },
-      store: {
-        name: "ImmoSuite"
-      },
-      custom_data: {
+      item_name: `Loyer ${currentMonth}`,
+      item_price: Number(payment.amount),
+      ref_command: `LOYER-${payment.id}-${Date.now()}`,
+      command_name: `Loyer de ${currentMonth} pour ${tenant.firstName} ${tenant.lastName}`,
+      currency: process.env.PAYTECH_CURRENCY || 'XOF',
+      env: paytechEnv,
+      ipn_url: `${backUrl}/api/portal/paytech-webhook`,
+      success_url: `${frontUrl}/locataire/${token}?payment=success`,
+      cancel_url: `${frontUrl}/locataire/${token}?payment=cancel`,
+      custom_field: JSON.stringify({
         payment_id: payment.id,
-        tenant_id: tenant.id
-      },
-      actions: {
-        return_url: `${frontUrl}/locataire/${token}?payment=success`,
-        cancel_url: `${frontUrl}/locataire/${token}?payment=cancel`,
-        callback_url: `${backUrl}/api/portal/paydunya-webhook` // C'est ici que Paydunya envoie IPN
-      }
+        tenant_id: tenant.id,
+      }),
     }
 
-    const response = await fetch(paydunyaUrl, {
+    const response = await fetch(paytechUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'PAYDUNYA-MASTER-KEY': process.env.PAYDUNYA_MASTER_KEY,
-        'PAYDUNYA-PRIVATE-KEY': process.env.PAYDUNYA_PRIVATE_KEY,
-        'PAYDUNYA-TOKEN': process.env.PAYDUNYA_TOKEN,
+        Accept: 'application/json',
+        API_KEY: process.env.PAYTECH_API_KEY || '',
+        API_SECRET: process.env.PAYTECH_API_SECRET || '',
       },
       body: JSON.stringify(payload)
     })
 
     const data = await response.json()
-    
-    if (data.response_code === '00') {
-      // PayDunya a bien généré la facture, on renvoie l'URL de paiement
-      return res.json({ paydunya_url: data.response_text })
-    } else {
-      const paydunyaMessage = data?.response_text || 'Erreur lors de la création de la facture PayDunya.'
-      return res.status(400).json({ error: paydunyaMessage, details: data })
+
+    const redirectUrl = data?.redirect_url || data?.redirectUrl
+    if (data?.success === 1 && redirectUrl) {
+      return res.json({ checkout_url: redirectUrl })
     }
+
+    const paytechMessage =
+      Array.isArray(data?.errors) && data.errors.length > 0
+        ? data.errors.join(' | ')
+        : data?.message || 'Erreur lors de la création du paiement PayTech.'
+    return res.status(400).json({ error: paytechMessage, details: data })
 
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 }
 
-// ======= PAYDUNYA: Étape 2 - Webhook IPN (Instant Payment Notification) =======
-export async function paydunyaWebhook(req, res) {
-  try {
-    // Paydunya nous envoie un POST avec { data: { hash: "..." } } que nous devons vérifier
-    // Dans beaucoup de cas IPN classiques, le statut de la facture est passé
-    // Pour simplifier l'exemple, nous allons directement analyser le payload reçu `req.body.status`
+// Compat temporaire avec ancien nom côté frontend.
+export const paydunyaInit = paytechInit
 
-    const ipnData = req.body
-    
-    // Le statut officiel renvoyé par Paydunya lors d'un paiement réussi est "completed"
-    if (ipnData && ipnData.status === 'completed') {
-      const paymentId = ipnData.custom_data?.payment_id
+// ======= PAYTECH: Étape 2 - Webhook IPN (Instant Payment Notification) =======
+export async function paytechWebhook(req, res) {
+  try {
+    const ipnData = req.body || {}
+    const event = String(ipnData.type_event || ipnData.event || ipnData.status || '').toLowerCase()
+    const isSuccess = ['sale_complete', 'completed', 'success', 'paid'].includes(event)
+    if (isSuccess) {
+      let paymentId = ipnData.custom_data?.payment_id
+      if (!paymentId && typeof ipnData.custom_field === 'string') {
+        try {
+          paymentId = JSON.parse(ipnData.custom_field)?.payment_id
+        } catch (e) { /* ignore malformed custom_field */ }
+      }
       if (paymentId) {
         const payment = await Payment.findByPk(paymentId)
         if (payment && payment.status !== 'Payé') {
-          // On marque officiellement comme payé !
           await payment.update({
             status: 'Payé',
             quittance: true,
             date: new Date().toISOString().split('T')[0]
           })
-          console.log(`✅ [Webhook PayDunya] Paiement #${payment.id} confirmé et marqué comme Payé.`)
+          console.log(`✅ [Webhook PayTech] Paiement #${payment.id} confirmé et marqué comme Payé.`)
         }
       }
     }
-    
-    // Toujours répondre 200 OK à PayDunya pour signifier la réception
+
     res.status(200).send('Webhook OK')
   } catch (err) {
-    console.error('Erreur Webhook PayDunya:', err.message)
+    console.error('Erreur Webhook PayTech:', err.message)
     res.status(500).send('Server Error')
   }
 }
 
-// (Facultatif) Permet de simuler un succès manuel si la webhook est bloquée (localhost sans ngrok)
+// Compat route historique
+export const paydunyaWebhook = paytechWebhook
+
+// (Facultatif) Permet de simuler un succès manuel si la webhook est bloquée
 export async function verifyPaymentManual(req, res) {
   try {
     const { token } = req.params
@@ -180,7 +183,10 @@ export async function verifyPaymentManual(req, res) {
     
     // On trouve le paiement en attente
     const payment = await Payment.findOne({
-      where: { tenantId: tenant.id, status: 'En attente PayDunya' },
+      where: {
+        tenantId: tenant.id,
+        status: { [Op.in]: ['En attente', 'En attente PayDunya'] },
+      },
       order: [['id', 'DESC']]
     })
 

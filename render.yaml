@@ -26,4 +26,9 @@ services:
         generateValue: true
       - key: JWT_EXPIRES_IN
         value: 7d
-      # (Vous devrez ajouter vos clés PayDunya manuellement sur le tableau de bord Render)
+      # PayTech (mode test recommandé au démarrage)
+      - key: PAYTECH_MODE
+        value: test
+      # Ajoutez ces secrets manuellement dans Render:
+      # PAYTECH_API_KEY, PAYTECH_API_SECRET
+      # Optionnel: PAYTECH_BASE_URL=https://paytech.sn/api/payment/request-payment

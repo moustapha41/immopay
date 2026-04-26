@@ -167,8 +167,15 @@ export const dashboard = {
 // ==================== PORTAL (public) ====================
 export const portal = {
   getData: (token) => fetch(`${API_BASE}/portal/${token}`).then(r => r.json()),
+  paytechInit: (token, amount) =>
+    fetch(`${API_BASE}/portal/${token}/paytech-init`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount }),
+    }).then(r => r.json()),
+  // Compat temporaire avec anciens appels.
   paydunyaInit: (token, amount) =>
-    fetch(`${API_BASE}/portal/${token}/paydunya-init`, {
+    fetch(`${API_BASE}/portal/${token}/paytech-init`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount }),
