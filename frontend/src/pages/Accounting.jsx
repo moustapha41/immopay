@@ -127,12 +127,12 @@ export default function Accounting() {
 
   return (
     <div className="animate-fade-in accounting-module">
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div className="page-header accounting-header">
         <div>
           <h1>Comptabilité</h1>
           <p>Gestion comptable SYSCOHADA et états financiers automatiques</p>
         </div>
-        <div style={{ display: 'flex', gap: 'var(--space-md)' }}>
+        <div className="accounting-header-actions">
           <button 
             className="btn btn-ghost" 
             onClick={handleSync}
@@ -147,7 +147,7 @@ export default function Accounting() {
         </div>
       </div>
 
-      <div className="tabs tabs-secondary" style={{ marginBottom: 'var(--space-xl)' }}>
+      <div className="tabs tabs-secondary accounting-tabs" style={{ marginBottom: 'var(--space-xl)' }}>
         <button className={`tab ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
           <BarChart2 size={16} style={{marginRight: 6}}/> Dashboard
         </button>
@@ -432,8 +432,8 @@ export default function Accounting() {
         title="Saisie comptable (Écriture manuelle)"
         maxWidth="860px"
       >
-        <form onSubmit={handleCreateEntry} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--space-md)' }}>
+        <form className="accounting-entry-form" onSubmit={handleCreateEntry}>
+          <div className="accounting-entry-grid">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label>Date</label>
               <input type="date" name="date" required defaultValue={new Date().toISOString().split('T')[0]} />
@@ -478,7 +478,7 @@ export default function Accounting() {
               </select>
             </div>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-md)', marginTop: 'var(--space-md)' }}>
+          <div className="accounting-entry-actions">
             <button type="button" className="btn btn-ghost" onClick={() => setIsEntryModalOpen(false)}>Annuler</button>
             <button type="submit" className="btn btn-primary">Créer l'écriture</button>
           </div>
