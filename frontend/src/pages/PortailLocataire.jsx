@@ -155,7 +155,7 @@ export default function PortailLocataire() {
                   fontSize: '16px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                   cursor: isPaying ? 'wait' : 'pointer', boxShadow: '0 4px 15px rgba(212,168,67,0.3)', opacity: isPaying ? 0.7 : 1
                 }}>
-                  {isPaying ? <><Loader2 size={20} className="animate-spin" /> Connexion sécurisée...</> : <><CreditCard size={20} /> Payer avec PayTech</>}
+                  {isPaying ? <><Loader2 size={20} className="animate-spin" /> Connexion sécurisée...</> : <><CreditCard size={20} /> Payer</>}
                 </button>
               </form>
               <div style={{ textAlign: 'center', marginTop: 12, fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}><ShieldCheck size={14} /> Transactions protégées</div>
